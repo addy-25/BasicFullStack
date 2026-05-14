@@ -34,6 +34,6 @@ def verify_token(token):
             SECRET_KEY,
             algorithms=["HS256"]
         )
-        return payload["user.id"]
+        return payload["user_id"]
     except JWTError:
         return None

@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException,Request
 from sqlalchemy.orm import Session
+from fastapi.middleware.cors import CORSMiddleware
 
 from database import SessionLocal, engine
 from models import User, Base,Task
@@ -8,6 +9,14 @@ from auth import hash_password, verify_password, create_token,verify_token
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5174"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def get_db():
 
