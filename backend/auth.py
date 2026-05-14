@@ -1,6 +1,6 @@
 from passlib.context import CryptContext
-from jose import jwt
-from datetime import datetime, timedelta
+from jose import jwt,JWTError
+from datetime import datetime, timedelta,timezone
 import os
 
 SECRET_KEY = "mysecretkey"
@@ -27,3 +27,13 @@ def create_token(user_id):
     )
 
     return token
+def verify_token(token):
+    try:
+        payload=jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=["HS256"]
+        )
+        return payload["user.id"]
+    except JWTError:
+        return None
