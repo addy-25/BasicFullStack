@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import SessionLocal, engine
 from models import User, Base, Task
 from auth import hash_password, verify_password, create_token, verify_token
+from datetime import datetime
 
 Base.metadata.create_all(bind=engine)
 
@@ -25,7 +26,6 @@ def get_db():
     finally:
         db.close()
 
-# ── helper: extract + verify token ───────────────────────────────────
 def get_user_id_from_request(request: Request):
     auth_header = request.headers.get("Authorization")
     if not auth_header:
@@ -66,11 +66,33 @@ def login(data: dict, db: Session = Depends(get_db)):
 @app.post("/tasks")
 def create_task(data: dict, request: Request, db: Session = Depends(get_db)):
     user_id = get_user_id_from_request(request)
+
+    due_date=None
+    if data.get("due_date"):
+        due_date=datetime.fromisoformat(data["due_date"])
+
+    priority_map = {
+        "low": 0.8,
+        "medium": 1,
+        "high": 1.5
+    }
+    energy_level = data.get(
+        "energy_level",
+        "medium"
+    )
+
     task = Task(
         title=data["title"],
-        owner_id=user_id,
-        completed=False
+        energy_level=energy_level,
+        priority_weight=priority_map.get(
+            energy_level,
+            1
+        ),
+        due_date=due_date,
+        timer_minutes=data.get("timer_minutes"),
+        owner_id=user_id
     )
+
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -78,21 +100,106 @@ def create_task(data: dict, request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/tasks")
-def get_tasks(request: Request, db: Session = Depends(get_db)):
-    user_id = get_user_id_from_request(request)
-    tasks = db.query(Task).filter(Task.owner_id == user_id).all()
-    return tasks
+def get_tasks(
+    request: Request,
+    db: Session = Depends(get_db)
+):
 
+    user_id = get_user_id_from_request(request)
+
+    tasks = db.query(Task).filter(
+        Task.owner_id == user_id
+    ).all()
+
+    return [
+        {
+            "id": task.id,
+            "title": task.title,
+            "energy_level": task.energy_level,
+            "completed": task.completed,
+            "priority_weight": task.priority_weight,
+            "due_date": task.due_date,
+            "timer_minutes": task.timer_minutes,
+            "created_at": task.created_at
+        }
+        for task in tasks
+    ]
+
+
+from datetime import datetime
 
 @app.put("/tasks/{task_id}")
-def update_task(task_id: int, data: dict, request: Request, db: Session = Depends(get_db)):
+def update_task(
+    task_id: int,
+    data: dict,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+
     user_id = get_user_id_from_request(request)
-    task = db.query(Task).filter(Task.id == task_id, Task.owner_id == user_id).first()
+
+    task = db.query(Task).filter(
+        Task.id == task_id,
+        Task.owner_id == user_id
+    ).first()
+
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    task.title = data["title"]
+        raise HTTPException(
+            status_code=404,
+            detail="Task not found"
+        )
+
+    if "title" in data:
+        task.title = data["title"]
+
+    if "energy_level" in data:
+
+        task.energy_level = data["energy_level"]
+
+        priority_map = {
+            "low": 0.8,
+            "medium": 1,
+            "high": 1.5
+        }
+
+        task.priority_weight = priority_map.get(
+            data["energy_level"],
+            1
+        )
+
+    if "completed" in data:
+        task.completed = data["completed"]
+
+    if "due_date" in data:
+
+        if data["due_date"]:
+            task.due_date = datetime.fromisoformat(
+                data["due_date"]
+            )
+        else:
+            task.due_date = None
+
+    if "timer_minutes" in data:
+
+        task.timer_minutes = data["timer_minutes"]
+
     db.commit()
-    return {"message": "Task updated"}
+
+    db.refresh(task)
+
+    return {
+        "message": "Task updated",
+        "task": {
+            "id": task.id,
+            "title": task.title,
+            "energy_level": task.energy_level,
+            "completed": task.completed,
+            "priority_weight": task.priority_weight,
+            "due_date": task.due_date,
+            "timer_minutes": task.timer_minutes,
+            "created_at": task.created_at
+        }
+    }
 
 
 @app.patch("/tasks/{task_id}/complete")
