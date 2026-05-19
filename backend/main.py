@@ -1,13 +1,16 @@
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
 
-
-from datetime import datetime, timezone,timedelta
+from datetime import datetime, timezone, timedelta
 
 from database import SessionLocal, engine
 from models import User, Base, Task
-from auth import hash_password, verify_password, create_token, verify_token
+from auth import (
+    hash_password, verify_password,
+    create_token, verify_token,
+    create_refresh_token, rotate_refresh_token, revoke_refresh_token,
+)
 
 Base.metadata.create_all(bind=engine)
 
@@ -81,13 +84,53 @@ def signup(data: dict, db: Session = Depends(get_db)):
 
 
 @app.post("/login")
-def login(data: dict, db: Session = Depends(get_db)):
+def login(data: dict, response: Response, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == data["email"]).first()
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email")
     if not verify_password(data["password"], user.password):
         raise HTTPException(status_code=401, detail="Wrong password")
+
+    refresh_token = create_refresh_token(user.id)
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        max_age=7 * 24 * 60 * 60,
+        samesite="lax",
+        secure=False,
+    )
     return {"access_token": create_token(user.id)}
+
+
+@app.post("/auth/refresh")
+def refresh(request: Request, response: Response):
+    old_token = request.cookies.get("refresh_token")
+    if not old_token:
+        raise HTTPException(status_code=401, detail="No refresh token")
+
+    user_id, new_refresh = rotate_refresh_token(old_token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+
+    response.set_cookie(
+        key="refresh_token",
+        value=new_refresh,
+        httponly=True,
+        max_age=7 * 24 * 60 * 60,
+        samesite="lax",
+        secure=False,
+    )
+    return {"access_token": create_token(user_id)}
+
+
+@app.post("/logout")
+def logout(request: Request, response: Response):
+    token = request.cookies.get("refresh_token")
+    if token:
+        revoke_refresh_token(token)
+    response.delete_cookie("refresh_token")
+    return {"message": "Logged out"}
 
 
 @app.post("/tasks")

@@ -19,7 +19,6 @@ def verify_password(plain, hashed):
     return pwd_context.verify(plain, hashed)
 
 
-# ── Access token (JWT, 15 min) ────────────────────────────────────────────────
 def create_token(user_id: int) -> str:
     payload = {
         "user_id": user_id,
@@ -35,7 +34,6 @@ def verify_token(token: str):
         return None
 
 
-# ── Refresh token (UUID stored in Redis, 7 days) ──────────────────────────────
 def create_refresh_token(user_id: int) -> str:
     token = str(uuid.uuid4())
     ttl   = REFRESH_TOKEN_DAYS * 24 * 60 * 60
