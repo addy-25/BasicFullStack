@@ -1,12 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
 
-// ── existing pages ────────────────────────────────────────────────────
 import Login     from "./pages/Login";
 import Signup    from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 
-// ── stub pages (replace with real components as you build them) ───────
 const Stub = ({ name }) => (
   <div style={{
     minHeight: "100vh",
