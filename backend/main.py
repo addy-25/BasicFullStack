@@ -11,6 +11,7 @@ from auth import (
     create_token, verify_token,
     create_refresh_token, rotate_refresh_token, revoke_refresh_token,
 )
+from config import GITHUB_CLIENT_ID,GITHUB_CLIENT_SECRET
 
 Base.metadata.create_all(bind=engine)
 
