@@ -4,6 +4,7 @@ import Sidebar from "./Sidebar";
 import Login     from "./pages/Login";
 import Signup    from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
+import Settings  from "./pages/settings/Settings";  // ← already imported, good
 
 const Stub = ({ name }) => (
   <div style={{
@@ -29,14 +30,12 @@ const Stub = ({ name }) => (
   </div>
 );
 
-// ── auth guard ────────────────────────────────────────────────────────
 function RequireAuth({ children }) {
   const token = localStorage.getItem("token");
   if (!token) return <Navigate to="/login" replace />;
   return children;
 }
 
-// ── layout wrapper (sidebar shown only on protected pages) ────────────
 function AppLayout({ children }) {
   const email = localStorage.getItem("user_email") || "user@example.com";
   const role  = localStorage.getItem("user_role")  || "member";
@@ -53,11 +52,11 @@ export default function App() {
       <Routes>
 
         {/* ── Public routes (no sidebar) ── */}
-        <Route path="/login"          element={<Login />} />
-        <Route path="/signup"         element={<Signup />} />
-        <Route path="/forgot-password" element={<Stub name="Forgot Password" />} />
+        <Route path="/login"               element={<Login />} />
+        <Route path="/signup"              element={<Signup />} />
+        <Route path="/forgot-password"     element={<Stub name="Forgot Password" />} />
         <Route path="/reset-password/:token" element={<Stub name="Reset Password" />} />
-        <Route path="/shared/:token"  element={<Stub name="Shared Board" />} />
+        <Route path="/shared/:token"       element={<Stub name="Shared Board" />} />
 
         {/* ── Protected routes (with sidebar) ── */}
         <Route path="/onboarding" element={
@@ -112,23 +111,22 @@ export default function App() {
           </RequireAuth>
         } />
 
+        {/* ── CHANGED: was <Stub name="Settings — Profile" /> ── */}
+        {/* ── NOW: renders the real Settings component          ── */}
+        {/* ── Settings.jsx handles its own internal tab routing ── */}
+        {/* ── /settings?github=connected also lands here        ── */}
         <Route path="/settings" element={
           <RequireAuth>
-            <AppLayout><Stub name="Settings — Profile" /></AppLayout>
+            <AppLayout><Settings /></AppLayout>
           </RequireAuth>
         } />
 
-        <Route path="/settings/webhooks" element={
-          <RequireAuth>
-            <AppLayout><Stub name="Settings — Webhooks" /></AppLayout>
-          </RequireAuth>
-        } />
-
-        <Route path="/settings/preferences" element={
-          <RequireAuth>
-            <AppLayout><Stub name="Settings — Preferences" /></AppLayout>
-          </RequireAuth>
-        } />
+        {/* ── These sub-routes are now handled INSIDE Settings.jsx ── */}
+        {/* ── as tabs, not separate routes. But keep them as       ── */}
+        {/* ── redirects so old links don't 404                     ── */}
+        <Route path="/settings/webhooks"     element={<Navigate to="/settings" replace />} />
+        <Route path="/settings/preferences"  element={<Navigate to="/settings" replace />} />
+        <Route path="/settings/integrations" element={<Navigate to="/settings" replace />} />
 
         {/* ── Admin routes ── */}
         <Route path="/admin/users" element={
@@ -150,8 +148,8 @@ export default function App() {
         } />
 
         {/* ── Fallbacks ── */}
-        <Route path="/"  element={<Navigate to="/dashboard" replace />} />
-        <Route path="*"  element={
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={
           <div style={{
             minHeight:"100vh", display:"flex", flexDirection:"column",
             alignItems:"center", justifyContent:"center",

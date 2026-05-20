@@ -20,6 +20,7 @@ class User(Base):
     email    = Column(String, unique=True)
     password = Column(String)
     tasks    = relationship("Task", back_populates="owner")
+    integrations = relationship("IntegrationConnection", back_populates="owner")
 
 
 class Task(Base):
@@ -40,3 +41,16 @@ class Task(Base):
 
     owner_id = Column(Integer, ForeignKey("users.id"))
     owner    = relationship("User", back_populates="tasks")
+
+class IntegrationConnection(Base):
+    __tablename__ = "integration_connections"
+
+    id           = Column(Integer,  primary_key=True)
+    owner_id     = Column(Integer,  ForeignKey("users.id"))
+    provider     = Column(String)
+    access_token = Column(String)
+    username     = Column(String)
+    connected_at = Column(DateTime)
+    is_active    = Column(Boolean, default=True)
+
+    owner = relationship("User", back_populates="integrations")

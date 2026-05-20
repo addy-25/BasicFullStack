@@ -1,17 +1,19 @@
 from fastapi import FastAPI, Depends, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
 
 from datetime import datetime, timezone, timedelta
 
 from database import SessionLocal, engine
-from models import User, Base, Task
+from models import User, Base, Task, IntegrationConnection
 from auth import (
     hash_password, verify_password,
     create_token, verify_token,
     create_refresh_token, rotate_refresh_token, revoke_refresh_token,
 )
 from config import GITHUB_CLIENT_ID,GITHUB_CLIENT_SECRET
+from integrations.registry import get_provider
 
 Base.metadata.create_all(bind=engine)
 
@@ -218,3 +220,110 @@ def delete_task(task_id: int, request: Request, db: Session = Depends(get_db)):
     db.delete(task)
     db.commit()
     return {"message": "Task deleted"}
+
+# Add to main.py
+
+from integrations.registry import get_provider
+
+@app.get("/integrations/{provider}/oauth-url")
+def integration_oauth_url(provider: str, request: Request):
+    """
+    Works for ALL providers.
+    /integrations/github/oauth-url  → GitHubProvider.get_oauth_url()
+    /integrations/slack/oauth-url   → SlackProvider.get_oauth_url()
+    /integrations/linear/oauth-url  → LinearProvider.get_oauth_url()
+    """
+    user_id  = get_user_id_from_request(request)
+    p        = get_provider(provider)
+    url      = p.get_oauth_url(state=str(user_id))
+    return {"url": url}
+
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+now_ist = datetime.now(
+    ZoneInfo("Asia/Kolkata")
+)
+@app.get("/integrations/{provider}/callback")
+def integration_callback(
+    provider: str,
+    code:     str,
+    state:    str,
+    error:    str = None,
+    db:       Session = Depends(get_db)
+):
+    """
+    GitHub, Slack, Linear all redirect back here.
+    The {provider} param tells us which one to use.
+    """
+    frontend_base = "http://localhost:5173/settings"
+
+    if error:
+        return RedirectResponse(f"{frontend_base}?{provider}=cancelled")
+
+    user_id = int(state)
+
+    try:
+        p         = get_provider(provider)
+        token_data = p.exchange_code(code)
+        # token_data = { "access_token": "...", "username": "addy-25" }
+    except Exception as e:
+        print(f"OAuth error for {provider}:", e)
+        return RedirectResponse(f"{frontend_base}?{provider}=error")
+
+    # Upsert into IntegrationConnection table
+    existing = db.query(IntegrationConnection).filter(
+        IntegrationConnection.owner_id == user_id,
+        IntegrationConnection.provider == provider,
+    ).first()
+
+    if existing:
+        existing.access_token = token_data["access_token"]
+        existing.username     = token_data["username"]
+        existing.connected_at = now_ist
+        existing.is_active    = True
+    else:
+        db.add(IntegrationConnection(
+            owner_id        = user_id,
+            provider        = provider,
+            access_token    = token_data["access_token"],
+            username        = token_data["username"],
+            connected_at    = now_ist,
+            is_active       = True,
+        ))
+
+    db.commit()
+    return RedirectResponse(f"{frontend_base}?{provider}=connected")
+
+
+@app.get("/integrations/{provider}/status")
+def integration_status(provider: str, request: Request, db: Session = Depends(get_db)):
+    user_id = get_user_id_from_request(request)
+
+    connection = db.query(IntegrationConnection).filter(
+        IntegrationConnection.owner_id == user_id,
+        IntegrationConnection.provider == provider,
+        IntegrationConnection.is_active == True,
+    ).first()
+
+    return {
+        "connected": connection is not None,
+        "username":  connection.username if connection else None,
+        "provider":  provider,
+    }
+
+
+@app.delete("/integrations/{provider}/disconnect")
+def integration_disconnect(provider: str, request: Request, db: Session = Depends(get_db)):
+    user_id = get_user_id_from_request(request)
+
+    connection = db.query(IntegrationConnection).filter(
+        IntegrationConnection.owner_id == user_id,
+        IntegrationConnection.provider == provider,
+    ).first()
+
+    if connection:
+        connection.is_active = False
+        db.commit()
+
+    return {"message": f"{provider} disconnected"}
