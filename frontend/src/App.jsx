@@ -4,7 +4,8 @@ import Sidebar from "./Sidebar";
 import Login     from "./pages/Login";
 import Signup    from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
-import Settings  from "./pages/settings/Settings";  // ← already imported, good
+import Settings  from "./pages/settings/Settings";  
+import Notifications from "./pages/Notifications";
 
 const Stub = ({ name }) => (
   <div style={{
@@ -88,10 +89,10 @@ export default function App() {
         } />
 
         <Route path="/notifications" element={
-          <RequireAuth>
-            <AppLayout><Stub name="Notifications" /></AppLayout>
-          </RequireAuth>
-        } />
+  <RequireAuth>
+    <AppLayout><Notifications /></AppLayout>
+  </RequireAuth>
+} />
 
         <Route path="/leaderboard" element={
           <RequireAuth>

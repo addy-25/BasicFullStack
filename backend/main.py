@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone, timedelta
 
 from database import SessionLocal, engine
-from models import User, Base, Task, IntegrationConnection
+from models import User, Base, Task, IntegrationConnection, IntegrationItem
 from auth import (
     hash_password, verify_password,
     create_token, verify_token,
@@ -14,6 +14,7 @@ from auth import (
 )
 from config import GITHUB_CLIENT_ID,GITHUB_CLIENT_SECRET
 from integrations.registry import get_provider
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -26,6 +27,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 IST = timezone(timedelta(hours=5, minutes=30))
 def get_db():
@@ -221,18 +223,12 @@ def delete_task(task_id: int, request: Request, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Task deleted"}
 
-# Add to main.py
 
-from integrations.registry import get_provider
+
 
 @app.get("/integrations/{provider}/oauth-url")
 def integration_oauth_url(provider: str, request: Request):
-    """
-    Works for ALL providers.
-    /integrations/github/oauth-url  → GitHubProvider.get_oauth_url()
-    /integrations/slack/oauth-url   → SlackProvider.get_oauth_url()
-    /integrations/linear/oauth-url  → LinearProvider.get_oauth_url()
-    """
+   
     user_id  = get_user_id_from_request(request)
     p        = get_provider(provider)
     url      = p.get_oauth_url(state=str(user_id))
@@ -327,3 +323,163 @@ def integration_disconnect(provider: str, request: Request, db: Session = Depend
         db.commit()
 
     return {"message": f"{provider} disconnected"}
+
+# Add this to main.py
+
+import hmac
+import hashlib
+import os
+
+GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "")
+
+@app.post("/integrations/github/webhook")
+async def github_webhook(request: Request, db: Session = Depends(get_db)):
+
+    # Step 1 — verify it's actually GitHub sending this
+    # GitHub signs every webhook payload with your WEBHOOK_SECRET
+    # If the signature doesn't match, someone is faking it
+    body = await request.body()
+    signature = request.headers.get("X-Hub-Signature-256", "")
+    expected = "sha256=" + hmac.new(
+        GITHUB_WEBHOOK_SECRET.encode(),
+        body,
+        hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(signature, expected):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    # Step 2 — parse the payload
+    payload  = await request.json()
+    action   = payload.get("action")        # "assigned", "closed", "opened"
+    issue    = payload.get("issue", {})
+    assignee = issue.get("assignee") or {}
+    github_username = assignee.get("login") # "addy-25"
+
+    # Step 3 — only care about assignment events
+    if action != "assigned" or not github_username:
+        return {"ok": True}  # ignore everything else
+
+    # Step 4 — find which TaskDecay user owns this GitHub account
+    connection = db.query(IntegrationConnection).filter(
+        IntegrationConnection.provider == "github",
+        IntegrationConnection.username == github_username,
+        IntegrationConnection.is_active == True,
+    ).first()
+
+    if not connection:
+        return {"ok": True}  # this person hasn't connected GitHub
+
+    # Step 5 — map GitHub labels to energy level
+    labels = [l["name"].lower() for l in issue.get("labels", [])]
+    if any(l in labels for l in ["high-priority", "urgent", "critical"]):
+        energy = "high"
+    elif any(l in labels for l in ["low-priority", "minor"]):
+        energy = "low"
+    else:
+        energy = "medium"
+
+    # Step 6 — get due date from milestone if available
+    due_date = None
+    milestone = issue.get("milestone")
+    if milestone and milestone.get("due_on"):
+        due_date = datetime.fromisoformat(
+            milestone["due_on"].replace("Z", "+00:00")
+        )
+
+    # Step 7 — create the inbox item
+    # Check it doesn't already exist (GitHub can fire duplicate events)
+    existing_item = db.query(IntegrationItem).filter(
+        IntegrationItem.owner_id  == connection.owner_id,
+        IntegrationItem.source    == "github",
+        IntegrationItem.source_id == str(issue["number"]),
+    ).first()
+
+    if existing_item:
+        return {"ok": True}  # already in inbox, skip
+
+    item = IntegrationItem(
+        owner_id         = connection.owner_id,
+        source           = "github",
+        source_id        = str(issue["number"]),
+        source_url       = issue["html_url"],
+        title            = issue["title"],
+        body             = issue.get("body", ""),
+        suggested_energy = energy,
+        suggested_due    = due_date,
+        status           = "inbox",
+        received_at      = now_ist,
+    )
+    db.add(item)
+    db.commit()
+    return {"ok": True}
+
+def serialize_item(item):
+    return {
+        "id":      item.id,
+        "source":  item.source,
+        "title":   item.title,
+        "body":    item.body,
+        "url":     item.source_url,
+        "energy":  item.suggested_energy,
+        "status":  item.status,
+        "task_id": item.task_id,
+    }
+
+
+@app.get("/notifications")
+def list_notifications(request: Request, status: str = "inbox",
+                       db: Session = Depends(get_db)):
+    user_id = get_user_id_from_request(request)
+    q = db.query(IntegrationItem).filter(IntegrationItem.owner_id == user_id)
+    if status != "all":
+        q = q.filter(IntegrationItem.status == status)
+    items = q.order_by(IntegrationItem.received_at.desc()).all()
+    return [serialize_item(i) for i in items]
+
+
+@app.post("/notifications/{item_id}/accept")
+def accept_notification(item_id: int, request: Request,
+                        db: Session = Depends(get_db)):
+    user_id = get_user_id_from_request(request)
+    item = db.query(IntegrationItem).filter(
+        IntegrationItem.id == item_id,
+        IntegrationItem.owner_id == user_id,
+    ).first()
+    if not item:
+        raise HTTPException(404, "Item not found")
+    if item.status == "accepted":
+        raise HTTPException(400, "Already accepted")
+
+    energy = item.suggested_energy or "medium"
+    task = Task(
+        title           = item.title,
+        energy_level    = energy,
+        priority_weight = PRIORITY_MAP.get(energy, 1.0),
+        due_date        = item.suggested_due,
+        owner_id        = user_id,
+        created_at      = utcnow(),
+    )
+    db.add(task)
+    db.flush()                       # get task.id before commit
+
+    item.status  = "accepted"
+    item.task_id = task.id
+    db.commit()
+    db.refresh(task)
+    return {"message": "Task created", "task": serialize_task(task)}
+
+
+@app.post("/notifications/{item_id}/dismiss")
+def dismiss_notification(item_id: int, request: Request,
+                         db: Session = Depends(get_db)):
+    user_id = get_user_id_from_request(request)
+    item = db.query(IntegrationItem).filter(
+        IntegrationItem.id == item_id,
+        IntegrationItem.owner_id == user_id,
+    ).first()
+    if not item:
+        raise HTTPException(404, "Item not found")
+    item.status = "dismissed"
+    db.commit()
+    return {"message": "Dismissed"}

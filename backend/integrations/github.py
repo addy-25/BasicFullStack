@@ -1,79 +1,75 @@
-
-import os
 import requests
-from .base import OAuthProvider
+from urllib.parse import urlencode
 
-GITHUB_CLIENT_ID     = os.getenv("GITHUB_CLIENT_ID",     "")
-GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "")
+from .base import BaseProvider
+from config import GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_REDIRECT_URI
 
 
-class GitHubProvider(OAuthProvider):
+class GitHubProvider(BaseProvider):
+    name  = "github"
+    label = "GitHub"
 
-    name   = "github"
-    scopes = "repo,read:user"
-
+    def get_authorize_url(self, state: str) -> str:
+        params = {
+            "client_id":    GITHUB_CLIENT_ID,
+            "redirect_uri": GITHUB_REDIRECT_URI,
+            "scope":        "repo",      # needed to read issues; use "public_repo" for public-only
+            "state":        state,
+        }
+        return f"https://github.com/login/oauth/authorize?{urlencode(params)}"
+    
+        # main.py calls this name — alias to keep both naming styles working
     def get_oauth_url(self, state: str) -> str:
-        return (
-            "https://github.com/login/oauth/authorize"
-            f"?client_id={GITHUB_CLIENT_ID}"
-            f"&scope={self.scopes}"
-            f"&state={state}"
-        )
+        return self.get_authorize_url(state)
 
     def exchange_code(self, code: str) -> dict:
-        response = requests.post(
+        resp = requests.post(
             "https://github.com/login/oauth/access_token",
-            json={
+            headers={"Accept": "application/json"},
+            data={
                 "client_id":     GITHUB_CLIENT_ID,
                 "client_secret": GITHUB_CLIENT_SECRET,
                 "code":          code,
+                "redirect_uri":  GITHUB_REDIRECT_URI,
             },
-            headers={"Accept": "application/json"}
+            timeout=15,
         )
-        data = response.json()
-
-        if "access_token" not in data:
+        data = resp.json()
+        access_token = data.get("access_token")
+        if not access_token:
             raise ValueError(f"GitHub token exchange failed: {data}")
 
-        # Fetch username immediately — we need it for webhook matching
-        user_info = self.get_user_info(data["access_token"])
-
-        return {
-            "access_token": data["access_token"],
-            "username":     user_info["username"],
-            "display_name": user_info["display_name"],
-        }
-
-    def get_user_info(self, access_token: str) -> dict:
-        response = requests.get(
+        # Look up the connected account's username
+        me = requests.get(
             "https://api.github.com/user",
-            headers={"Authorization": f"Bearer {access_token}"}
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=15,
         ).json()
 
         return {
-            "username":     response.get("login", ""),
-            # login = "addy-25"
-            "display_name": response.get("name", response.get("login", "")),
-            # name  = "Aditya Sharma" (full name, may be empty)
+            "access_token":  access_token,
+            "refresh_token": None,
+            "account_login": me.get("login"),
+            "username": me.get("login")
         }
 
-    def close_item(self, access_token: str, source_url: str) -> bool:
-        """
-        source_url = "https://github.com/addy-25/repo/issues/42"
-        Split it to get owner, repo, issue number.
-        """
-        try:
-            parts        = source_url.rstrip("/").split("/")
-            issue_number = parts[-1]   # "42"
-            repo         = parts[-3]   # "repo"
-            owner        = parts[-4]   # "addy-25"
+    def fetch_items(self, integration) -> list[dict]:
+        resp = requests.get(
+            "https://api.github.com/issues",     # issues assigned to the authed user
+            headers={"Authorization": f"Bearer {integration.access_token}"},
+            params={"filter": "assigned", "state": "open", "per_page": 50},
+            timeout=15,
+        )
+        resp.raise_for_status()
 
-            response = requests.patch(
-                f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}",
-                json={"state": "closed"},
-                headers={"Authorization": f"Bearer {access_token}"}
-            )
-            return response.status_code == 200
-        except Exception as e:
-            print(f"GitHub close_item failed: {e}")
-            return False
+        items = []
+        for issue in resp.json():
+            if "pull_request" in issue:          # /issues also returns PRs — skip them
+                continue
+            items.append({
+                "external_id": str(issue["id"]),
+                "title":       issue["title"],
+                "body":        (issue.get("body") or "")[:1000],
+                "url":         issue["html_url"],
+            })
+        return items
