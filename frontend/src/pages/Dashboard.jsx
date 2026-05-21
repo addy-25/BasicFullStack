@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../api";
 
 function parseUTC(str) {
   if (!str) return null;
@@ -474,7 +474,7 @@ export default function Dashboard() {
   const fetchTasks = async () => {
     const token = localStorage.getItem("token");
     try {
-      const res = await axios.get("http://127.0.0.1:8000/tasks", {
+      const res = await api.get("/tasks", {
         headers: { Authorization: `Bearer ${token}` },
       });
       setTasks(res.data);
@@ -495,7 +495,7 @@ export default function Dashboard() {
     if (schedMode === "timer" && timerMins)
       body.timer_minutes = parseFloat(timerMins);
     try {
-      await axios.post("http://127.0.0.1:8000/tasks", body, {
+      await api.post("/tasks", body, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setTitle(""); setDueDate(""); setDueTime(""); setTimerMins("");
@@ -512,8 +512,8 @@ export default function Dashboard() {
     setUpdating(task.id);
     const token = localStorage.getItem("token");
     try {
-      await axios.patch(
-        `http://127.0.0.1:8000/tasks/${task.id}/complete`, {},
+      await api.patch(
+        `/tasks/${task.id}/complete`, {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setTasks(prev => prev.map(t =>
@@ -530,7 +530,7 @@ export default function Dashboard() {
   const deleteTask = async (taskId) => {
     const token = localStorage.getItem("token");
     try {
-      await axios.delete(`http://127.0.0.1:8000/tasks/${taskId}`, {
+      await api.delete(`/tasks/${taskId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setTasks(prev => prev.filter(t => t.id !== taskId));

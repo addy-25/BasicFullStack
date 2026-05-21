@@ -1,5 +1,5 @@
 import { useState } from "react";
-import axios from "axios";
+import api from "../api";
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@300;400&display=swap');
@@ -225,7 +225,7 @@ function Signup() {
   const signup = async () => {
     setLoading(true);
     try {
-      const response = await axios.post("http://127.0.0.1:8000/signup", { email, password });
+      const response = await api.post("/signup", { email, password });
       showToast(response.data.message, "success");
     } catch (err) {
       console.log(err);

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../../api";
 
 // ── All integrations defined here ─────────────────────────────────────
 // To add a new provider later (Linear, Slack, Jira):
@@ -332,8 +332,8 @@ function IntegrationCard({ integration, showToast }) {
       try {
         // provider variable is "github", "slack", etc.
         // backtick string so ${provider} is actually replaced
-        const res = await axios.get(
-          `http://127.0.0.1:8000/integrations/${provider}/status`,
+        const res = await api.get(
+          `/integrations/${provider}/status`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         setConnected(res.data.connected);
@@ -352,8 +352,8 @@ function IntegrationCard({ integration, showToast }) {
     setConnecting(true);
     const token = localStorage.getItem("token");
     try {
-      const res = await axios.get(
-        `http://127.0.0.1:8000/integrations/${provider}/oauth-url`,
+      const res = await api.get(
+        `/integrations/${provider}/oauth-url`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       // Redirect browser to provider's OAuth page
@@ -369,8 +369,8 @@ function IntegrationCard({ integration, showToast }) {
   const handleDisconnect = async () => {
     const token = localStorage.getItem("token");
     try {
-      await axios.delete(
-        `http://127.0.0.1:8000/integrations/${provider}/disconnect`,
+      await api.delete(
+        `/integrations/${provider}/disconnect`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setConnected(false);

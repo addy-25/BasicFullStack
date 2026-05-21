@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
-
-const API = "http://127.0.0.1:8000";
+import api from "../api";
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
@@ -64,7 +62,7 @@ export default function Notifications() {
 
   const loadItems = async () => {
     try {
-      const res = await axios.get(`${API}/notifications?status=inbox`, authHeader());
+      const res = await api.get(`/notifications?status=inbox`, authHeader());
       setItems(res.data);
     } catch {
       flash("Failed to load inbox", "error");
@@ -75,7 +73,7 @@ export default function Notifications() {
 
   const accept = async (id) => {
     try {
-      await axios.post(`${API}/notifications/${id}/accept`, {}, authHeader());
+      await api.post(`/notifications/${id}/accept`, {}, authHeader());
       setItems(prev => prev.filter(i => i.id !== id));
       flash("Added to dashboard ✓");
     } catch {
@@ -85,7 +83,7 @@ export default function Notifications() {
 
   const dismiss = async (id) => {
     try {
-      await axios.post(`${API}/notifications/${id}/dismiss`, {}, authHeader());
+      await api.post(`/notifications/${id}/dismiss`, {}, authHeader());
       setItems(prev => prev.filter(i => i.id !== id));
       flash("Dismissed");
     } catch {
