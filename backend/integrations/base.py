@@ -4,8 +4,8 @@ from abc import ABC, abstractmethod
 class BaseProvider(ABC):
     """Implement one subclass per platform (GitHub, Slack, Jira, ...)."""
 
-    name: str = ""          # e.g. "github"
-    label: str = ""         # e.g. "GitHub"  (shown in UI)
+    name: str = ""         
+    label: str = ""         
 
     @abstractmethod
     def get_authorize_url(self, state: str) -> str:
