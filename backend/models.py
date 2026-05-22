@@ -60,14 +60,14 @@ class IntegrationItem(Base):
 
     id               = Column(Integer, primary_key=True)
     owner_id         = Column(Integer, ForeignKey("users.id"))
-    source           = Column(String)                   # "github" | "slack" | ...
-    source_id        = Column(String)                   # e.g. issue number
+    source           = Column(String)                   
+    source_id        = Column(String)                   
     source_url       = Column(String, nullable=True)
     title            = Column(String)
     body             = Column(Text, nullable=True)
     suggested_energy = Column(String, default="medium")
     suggested_due    = Column(DateTime, nullable=True)
-    status           = Column(String, default="inbox")  # inbox | accepted | dismissed
+    status           = Column(String, default="inbox")  
     received_at      = Column(DateTime, server_default=func.now(), default=func.now())
     task_id          = Column(Integer, ForeignKey("tasks.id"), nullable=True)
 

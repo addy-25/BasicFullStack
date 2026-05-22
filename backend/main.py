@@ -180,8 +180,10 @@ def update_task(task_id: int, data: dict, request: Request, db: Session = Depend
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    if "title"         in data: task.title         = data["title"]
-    if "completed"     in data: task.completed     = data["completed"]
+    if "title"         in data:
+        task.title         = data["title"]
+    if "completed"     in data:
+        task.completed     = data["completed"]
     if "timer_minutes" in data:
         task.timer_minutes = float(data["timer_minutes"]) if data["timer_minutes"] else None
 
@@ -324,7 +326,7 @@ def integration_disconnect(provider: str, request: Request, db: Session = Depend
 
     return {"message": f"{provider} disconnected"}
 
-# Add this to main.py
+
 
 import hmac
 import hashlib
@@ -335,9 +337,7 @@ GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "")
 @app.post("/integrations/github/webhook")
 async def github_webhook(request: Request, db: Session = Depends(get_db)):
 
-    # Step 1 — verify it's actually GitHub sending this
-    # GitHub signs every webhook payload with your WEBHOOK_SECRET
-    # If the signature doesn't match, someone is faking it
+    
     body = await request.body()
     signature = request.headers.get("X-Hub-Signature-256", "")
     expected = "sha256=" + hmac.new(
@@ -351,14 +351,14 @@ async def github_webhook(request: Request, db: Session = Depends(get_db)):
 
     # Step 2 — parse the payload
     payload  = await request.json()
-    action   = payload.get("action")        # "assigned", "closed", "opened"
+    action   = payload.get("action")        
     issue    = payload.get("issue", {})
     assignee = issue.get("assignee") or {}
-    github_username = assignee.get("login") # "addy-25"
+    github_username = assignee.get("login") 
 
     # Step 3 — only care about assignment events
     if action != "assigned" or not github_username:
-        return {"ok": True}  # ignore everything else
+        return {"ok": True} 
 
     # Step 4 — find which TaskDecay user owns this GitHub account
     connection = db.query(IntegrationConnection).filter(

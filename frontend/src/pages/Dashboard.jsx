@@ -66,12 +66,51 @@ function fmtMs(ms) {
 }
 
 
-function TaskDrawer({ task, now, onClose, onComplete, onDelete }) {
+function TaskDrawer({ task, now, onClose, onComplete, onDelete, onUpdate }) {
   if (!task) return null;
 
   const decay = getDecayLevel(task, now);
   const color = decayColor(decay);
   const done  = !!task.completed;
+
+  const [editing,      setEditing]      = useState(false);
+  const [saving,       setSaving]       = useState(false);
+  const [editTitle,    setEditTitle]    = useState(task.title);
+  const [editEnergy,   setEditEnergy]   = useState(task.energy_level || "medium");
+  const [editSchedMode,setEditSchedMode]= useState(
+    task.timer_minutes ? "timer" : task.due_date ? "date" : "none"
+  );
+  const [editDueDate,  setEditDueDate]  = useState(() => {
+    if (!task.due_date) return "";
+    const d = parseUTC(task.due_date);
+    return d ? d.toISOString().slice(0, 10) : "";
+  });
+  const [editDueTime,  setEditDueTime]  = useState(() => {
+    if (!task.due_date) return "";
+    const d = parseUTC(task.due_date);
+    return d ? d.toISOString().slice(11, 16) : "";
+  });
+  const [editTimerMins,setEditTimerMins]= useState(
+    task.timer_minutes ? String(task.timer_minutes) : ""
+  );
+
+  const handleSave = async () => {
+    setSaving(true);
+    const payload = { title: editTitle, energy_level: editEnergy };
+    if (editSchedMode === "date" && editDueDate) {
+      payload.due_date     = editDueTime ? `${editDueDate}T${editDueTime}` : editDueDate;
+      payload.timer_minutes = null;
+    } else if (editSchedMode === "timer" && editTimerMins) {
+      payload.timer_minutes = parseFloat(editTimerMins);
+      payload.due_date      = null;
+    } else {
+      payload.due_date      = null;
+      payload.timer_minutes = null;
+    }
+    await onUpdate(task.id, payload);
+    setSaving(false);
+    setEditing(false);
+  };
 
   const R   = 46;
   const C   = 2 * Math.PI * R;
@@ -137,6 +176,55 @@ function TaskDrawer({ task, now, onClose, onComplete, onDelete }) {
           </svg>
         </div>
 
+        {editing && (
+          <div className="drawer-rows">
+            <div className="drawer-edit-field">
+              <span className="drow-lbl">Title</span>
+              <input className="task-input" value={editTitle}
+                onChange={e => setEditTitle(e.target.value)} />
+            </div>
+            <div className="drawer-edit-field">
+              <span className="drow-lbl">Difficulty</span>
+              <select className="energy-select" value={editEnergy}
+                onChange={e => setEditEnergy(e.target.value)}>
+                <option value="high">⚡ High</option>
+                <option value="medium">🔋 Medium</option>
+                <option value="low">🌿 Low</option>
+              </select>
+            </div>
+            <div className="drawer-edit-field">
+              <span className="drow-lbl">Deadline</span>
+              <div className="mode-toggle">
+                {[{id:"none",l:"None"},{id:"date",l:"📅 Date"},{id:"timer",l:"⏱ Timer"}].map(m=>(
+                  <button key={m.id}
+                    className={`mode-btn${editSchedMode===m.id?" active":""}`}
+                    onClick={()=>setEditSchedMode(m.id)}>{m.l}</button>
+                ))}
+              </div>
+            </div>
+            {editSchedMode === "date" && (
+              <div className="drawer-edit-field">
+                <span className="drow-lbl">Date / Time</span>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <input type="date" className="date-input" value={editDueDate}
+                    onChange={e=>setEditDueDate(e.target.value)} />
+                  <input type="time" className="time-input" value={editDueTime}
+                    onChange={e=>setEditDueTime(e.target.value)} />
+                </div>
+              </div>
+            )}
+            {editSchedMode === "timer" && (
+              <div className="drawer-edit-field">
+                <span className="drow-lbl">In (minutes)</span>
+                <input type="number" className="timer-input" min="0.01" step="any"
+                  value={editTimerMins} onChange={e=>setEditTimerMins(e.target.value)} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Read-only detail rows (shown when not editing) ──────────── */}
+        {!editing && (
         <div className="drawer-rows">
 
           <div className="drow">
@@ -220,19 +308,40 @@ function TaskDrawer({ task, now, onClose, onComplete, onDelete }) {
           </div>
 
         </div>
+        )}
 
         <div className="drawer-actions">
-          {!done
-            ? <button className="drawer-btn green" onClick={() => { onComplete(task); onClose(); }}>
-                ✓ Mark complete
+          {editing ? (
+            <>
+              <button className="drawer-btn gold" onClick={handleSave} disabled={saving}>
+                {saving ? "Saving…" : "✓ Save changes"}
               </button>
-            : <button className="drawer-btn gold" onClick={() => { onComplete(task); onClose(); }}>
-                ↺ Mark incomplete
+              <button className="drawer-btn"
+                style={{borderColor:"var(--border)",color:"var(--text-faint)"}}
+                onClick={() => setEditing(false)}>
+                Cancel
               </button>
-          }
-          <button className="drawer-btn red" onClick={() => { onDelete(task.id); onClose(); }}>
-            Delete task
-          </button>
+            </>
+          ) : (
+            <>
+              {!done && (
+                <button className="drawer-btn gold" onClick={() => setEditing(true)}>
+                  ✎ Edit task
+                </button>
+              )}
+              {!done
+                ? <button className="drawer-btn green" onClick={() => { onComplete(task); onClose(); }}>
+                    ✓ Mark complete
+                  </button>
+                : <button className="drawer-btn gold" onClick={() => { onComplete(task); onClose(); }}>
+                    ↺ Mark incomplete
+                  </button>
+              }
+              <button className="drawer-btn red" onClick={() => { onDelete(task.id); onClose(); }}>
+                Delete task
+              </button>
+            </>
+          )}
         </div>
 
       </div>
@@ -427,6 +536,11 @@ const styles = `
   .drow-val { font-size:12px; color:var(--text-dim); font-family:var(--mono); text-align:right; }
   .drawer-actions { padding:16px 24px 32px; display:flex; flex-direction:column; gap:8px; border-top:1px solid var(--border); margin-top:auto; }
   .drawer-btn { padding:10px 16px; border-radius:2px; font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; cursor:pointer; border:1px solid; transition:background .15s,transform .1s; }
+  .drawer-btn:disabled { opacity:.45; pointer-events:none; }
+  .drawer-edit-field { display:flex; flex-direction:column; gap:8px; padding:12px 0; border-bottom:1px solid rgba(212,175,80,0.06); }
+  .drawer-edit-field:last-child { border-bottom:none; }
+  .drawer-edit-field .task-input { width:100%; }
+  .drawer-edit-field .energy-select { width:100%; padding:9px 14px; }
   .drawer-btn:hover { transform:translateY(-1px); }
   .drawer-btn:active { transform:translateY(0); }
   .drawer-btn.green { background:rgba(106,158,96,0.12); border-color:rgba(106,158,96,0.5); color:#90c880; }
@@ -537,6 +651,21 @@ export default function Dashboard() {
       showToast("Deleted");
     } catch {
       showToast("Delete failed", "error");
+    }
+  };
+
+  const updateTask = async (id, data) => {
+    const token = localStorage.getItem("token");
+    try {
+      const res = await api.put(`/tasks/${id}`, data, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const updated = res.data.task;
+      setTasks(prev => prev.map(t => t.id === id ? updated : t));
+      setSelected(updated);
+      showToast("Task updated");
+    } catch {
+      showToast("Update failed", "error");
     }
   };
 
@@ -784,6 +913,7 @@ export default function Dashboard() {
           onClose={()=>setSelected(null)}
           onComplete={toggleComplete}
           onDelete={deleteTask}
+          onUpdate={updateTask}
         />
       )}
 
