@@ -483,3 +483,95 @@ def dismiss_notification(item_id: int, request: Request,
     item.status = "dismissed"
     db.commit()
     return {"message": "Dismissed"}
+
+SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET", "")
+
+@app.post("/integrations/slack/webhook")
+async def slack_webhook(request: Request, db: Session = Depends(get_db)):
+
+    body_bytes = await request.body()
+    body_str   = body_bytes.decode("utf-8")
+
+    # Slack URL verification challenge (happens when you first set the URL)
+    # Slack sends {"type": "url_verification", "challenge": "..."}
+    import json
+    try:
+        pre = json.loads(body_str)
+        if pre.get("type") == "url_verification":
+            return {"challenge": pre["challenge"]}
+    except Exception:
+        pass
+
+    # Verify Slack signature
+    timestamp = request.headers.get("X-Slack-Request-Timestamp", "")
+    slack_sig  = request.headers.get("X-Slack-Signature", "")
+    basestring = f"v0:{timestamp}:{body_str}"
+    expected   = "v0=" + hmac.new(
+        SLACK_SIGNING_SECRET.encode(), basestring.encode(), hashlib.sha256
+    ).hexdigest()
+    if SLACK_SIGNING_SECRET and not hmac.compare_digest(slack_sig, expected):
+        raise HTTPException(401, "Invalid Slack signature")
+
+    payload = json.loads(body_str)
+    event   = payload.get("event", {})
+    etype   = event.get("type")  # "message", "app_mention"
+
+    # Only handle direct messages and mentions
+    if etype not in ("message", "app_mention"):
+        return {"ok": True}
+
+    # Skip bot messages (avoid infinite loops)
+    if event.get("bot_id") or event.get("subtype"):
+        return {"ok": True}
+
+    slack_user_id = event.get("user")   # Slack user ID like "U012AB3CD"
+    text          = event.get("text", "")
+    channel       = event.get("channel", "")
+    ts            = event.get("ts", "")    # message timestamp = unique ID
+
+    # Find which TaskDecay user has this Slack user connected
+    # Note: Slack gives user IDs not usernames in events
+    # We match by looking up the Slack user profile via the stored token
+    connections = db.query(IntegrationConnection).filter(
+        IntegrationConnection.provider  == "slack",
+        IntegrationConnection.is_active == True,
+    ).all()
+
+    matched_connection = None
+    for conn in connections:
+        r = requests.get(
+            f"https://slack.com/api/users.info?user={slack_user_id}",
+            headers={"Authorization": f"Bearer {conn.access_token}"}
+        ).json()
+        if r.get("ok"):
+            name = r["user"]["profile"].get("display_name") or \
+                   r["user"]["profile"].get("real_name", "")
+            if name == conn.username:
+                matched_connection = conn
+                break
+
+    if not matched_connection:
+        return {"ok": True}
+
+    
+    existing = db.query(IntegrationItem).filter(
+        IntegrationItem.owner_id  == matched_connection.owner_id,
+        IntegrationItem.source    == "slack",
+        IntegrationItem.source_id == ts,
+    ).first()
+    if existing:
+        return {"ok": True}
+
+    db.add(IntegrationItem(
+        owner_id         = matched_connection.owner_id,
+        source           = "slack",
+        source_id        = ts,
+        source_url       = None,
+        title            = text[:100] if text else "Slack message",
+        body             = text,
+        suggested_energy = "medium",
+        status           = "inbox",
+        received_at      = utcnow(),
+    ))
+    db.commit()
+    return {"ok": True}

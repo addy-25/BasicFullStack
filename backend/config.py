@@ -17,4 +17,8 @@ GITHUB_REDIRECT_URI = os.getenv(
     f"{BACKEND_URL}/integrations/github/callback",
 )
 
+SLACK_CLIENT_ID      = os.getenv("SLACK_CLIENT_ID", "")
+SLACK_CLIENT_SECRET  = os.getenv("SLACK_CLIENT_SECRET", "")
+SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET", "")
+
 

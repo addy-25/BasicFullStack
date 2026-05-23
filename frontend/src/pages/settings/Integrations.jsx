@@ -29,7 +29,7 @@ const INTEGRATIONS = [
     name:      "Slack",
     desc:      "React to any message with an emoji to turn it into a task instantly.",
     features:  ["Emoji reactions", "Mentions", "DM reminders"],
-    available: false,
+    available: true,
   },
   {
     provider:  "jira",

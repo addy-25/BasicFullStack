@@ -13,7 +13,7 @@ class GitHubProvider(BaseProvider):
         params = {
             "client_id":    GITHUB_CLIENT_ID,
             "redirect_uri": GITHUB_REDIRECT_URI,
-            "scope":        "repo",      # needed to read issues; use "public_repo" for public-only
+            "scope":        "repo",      
             "state":        state,
         }
         return f"https://github.com/login/oauth/authorize?{urlencode(params)}"
