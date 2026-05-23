@@ -1,9 +1,10 @@
 from .github import GitHubProvider
+from .slack import SlackProvider
 # Later:  from .slack import SlackProvider   etc.
 
 PROVIDERS = {
     "github": GitHubProvider(),
-    # "slack":  SlackProvider(),
+    "slack":  SlackProvider(),
     # "jira":   JiraProvider(),
 }
 
