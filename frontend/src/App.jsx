@@ -37,6 +37,12 @@ function RequireAuth({ children }) {
   return children;
 }
 
+function RedirectIfAuthed({ children }) {
+  const token = localStorage.getItem("token");
+  if (token) return <Navigate to="/dashboard" replace />;
+  return children;
+}
+
 function AppLayout({ children }) {
   const email = localStorage.getItem("user_email") || "user@example.com";
   const role  = localStorage.getItem("user_role")  || "member";
@@ -53,8 +59,8 @@ export default function App() {
       <Routes>
 
         {/* ── Public routes (no sidebar) ── */}
-        <Route path="/login"               element={<Login />} />
-        <Route path="/signup"              element={<Signup />} />
+        <Route path="/login"  element={<RedirectIfAuthed><Login /></RedirectIfAuthed>} />
+        <Route path="/signup" element={<RedirectIfAuthed><Signup /></RedirectIfAuthed>} />
         <Route path="/forgot-password"     element={<Stub name="Forgot Password" />} />
         <Route path="/reset-password/:token" element={<Stub name="Reset Password" />} />
         <Route path="/shared/:token"       element={<Stub name="Shared Board" />} />
@@ -149,7 +155,7 @@ export default function App() {
         } />
 
         {/* ── Fallbacks ── */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="*" element={
           <div style={{
             minHeight:"100vh", display:"flex", flexDirection:"column",

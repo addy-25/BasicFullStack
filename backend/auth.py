@@ -1,3 +1,4 @@
+import os
 import uuid
 import redis
 from passlib.context import CryptContext
@@ -9,7 +10,7 @@ ACCESS_TOKEN_MINUTES = 15
 REFRESH_TOKEN_DAYS   = 7
 
 pwd_context  = CryptContext(schemes=["bcrypt"])
-redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+redis_client = redis.Redis(host=os.getenv("REDIS_HOST", "localhost"), port=6379, db=0, decode_responses=True)
 
 
 def hash_password(password):

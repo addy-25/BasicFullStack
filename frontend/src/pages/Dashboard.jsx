@@ -98,7 +98,7 @@ function TaskDrawer({ task, now, onClose, onComplete, onDelete, onUpdate }) {
     setSaving(true);
     const payload = { title: editTitle, energy_level: editEnergy };
     if (editSchedMode === "date" && editDueDate) {
-      payload.due_date     = editDueTime ? `${editDueDate}T${editDueTime}` : editDueDate;
+      payload.due_date     = new Date(editDueTime ? `${editDueDate}T${editDueTime}` : `${editDueDate}T00:00`).toISOString();
       payload.timer_minutes = null;
     } else if (editSchedMode === "timer" && editTimerMins) {
       payload.timer_minutes = parseFloat(editTimerMins);
@@ -605,7 +605,7 @@ export default function Dashboard() {
     const token = localStorage.getItem("token");
     const body  = { title, energy_level: energy };
     if (schedMode === "date" && dueDate)
-      body.due_date = dueTime ? `${dueDate}T${dueTime}` : dueDate;
+      body.due_date = new Date(dueTime ? `${dueDate}T${dueTime}` : `${dueDate}T00:00`).toISOString();
     if (schedMode === "timer" && timerMins)
       body.timer_minutes = parseFloat(timerMins);
     try {

@@ -53,10 +53,9 @@ def serialize_task(task):
     def fmt(dt):
         if dt is None:
             return None
-        
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=IST)
-        return dt.isoformat()          
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
 
     return {
         "id":              task.id,
