@@ -1,10 +1,8 @@
 import httpx
 from mcp.server.fastmcp import FastMCP
 
-# Create the MCP server
 mcp = FastMCP("gravitas", instructions="Gravitas Task Manager — manage tasks and notifications")
 
-# The MCP server talks to your existing FastAPI backend via HTTP
 API_BASE = "http://127.0.0.1:8000"
 TOKEN    = ""   # set at startup or read from env
 
