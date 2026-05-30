@@ -574,3 +574,84 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
     ))
     db.commit()
     return {"ok": True}
+
+from agent import run_agent
+
+@app.post("/agent/chat")
+def agent_chat(data: dict, request: Request, db: Session = Depends(get_db)):
+    user_id = get_user_id_from_request(request)
+    user_message = data.get("message", "")
+
+    # ── This function bridges AI tool calls → your real database ──
+    def tool_executor(tool_name: str, tool_input: dict) -> dict:
+        
+        if tool_name == "list_tasks":
+            tasks = db.query(Task).filter(Task.owner_id == user_id)
+            if not tool_input.get("include_completed"):
+                tasks = tasks.filter(Task.completed == False)
+            return [serialize_task(t) for t in tasks.all()]
+
+        elif tool_name == "get_inbox":
+            items = db.query(IntegrationItem).filter(
+                IntegrationItem.owner_id == user_id,
+                IntegrationItem.status == "inbox"
+            ).all()
+            return [serialize_item(i) for i in items]
+
+        elif tool_name == "accept_notification":
+            item = db.query(IntegrationItem).filter(
+                IntegrationItem.id == tool_input["item_id"],
+                IntegrationItem.owner_id == user_id,
+            ).first()
+            if not item:
+                return {"error": "Item not found"}
+            
+            energy = item.suggested_energy or "medium"
+            task = Task(
+                title=item.title,
+                energy_level=energy,
+                priority_weight=PRIORITY_MAP.get(energy, 1.0),
+                due_date=item.suggested_due,
+                owner_id=user_id,
+                created_at=utcnow(),
+            )
+            db.add(task)
+            db.flush()
+            item.status = "accepted"
+            item.task_id = task.id
+            db.commit()
+            return {"accepted": True, "task": serialize_task(task)}
+
+        elif tool_name == "create_task":
+            task = Task(
+                title=tool_input["title"],
+                energy_level=tool_input.get("energy_level", "medium"),
+                priority_weight=PRIORITY_MAP.get(tool_input.get("energy_level", "medium"), 1.0),
+                owner_id=user_id,
+                created_at=utcnow(),
+            )
+            db.add(task)
+            db.commit()
+            db.refresh(task)
+            return serialize_task(task)
+
+        elif tool_name == "update_task":
+            task = db.query(Task).filter(
+                Task.id == tool_input["task_id"],
+                Task.owner_id == user_id
+            ).first()
+            if not task:
+                return {"error": "Task not found"}
+            if "energy_level" in tool_input:
+                task.energy_level = tool_input["energy_level"]
+                task.priority_weight = PRIORITY_MAP.get(tool_input["energy_level"], 1.0)
+            if "completed" in tool_input:
+                task.completed = tool_input["completed"]
+            db.commit()
+            return {"updated": True}
+
+        return {"error": f"Unknown tool: {tool_name}"}
+
+    # ── Run the agent ──
+    reply = run_agent(user_message, tool_executor)
+    return {"reply": reply}

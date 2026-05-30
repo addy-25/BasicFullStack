@@ -6,6 +6,7 @@ import Signup    from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import Settings  from "./pages/settings/Settings";  
 import Notifications from "./pages/Notifications";
+import AgentChat from "./Components/AgentChat";
 
 const Stub = ({ name }) => (
   <div style={{
@@ -49,6 +50,7 @@ function AppLayout({ children }) {
   return (
     <Sidebar userEmail={email} userRole={role} notifCount={3}>
       {children}
+      <AgentChat />
     </Sidebar>
   );
 }

@@ -6,7 +6,7 @@ from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
 
 SECRET_KEY = "mysecretkey"
-ACCESS_TOKEN_MINUTES = 15
+ACCESS_TOKEN_MINUTES =99999
 REFRESH_TOKEN_DAYS   = 7
 
 pwd_context  = CryptContext(schemes=["bcrypt"])
