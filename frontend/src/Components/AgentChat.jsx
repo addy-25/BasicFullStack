@@ -45,7 +45,8 @@ export default function AgentChat() {
 
   return (
     <div style={{
-      position:"fixed", bottom:32, right:32, width:380, height:500,
+      position:"fixed", bottom:32, right:32, width:380,
+      height:"min(500px, calc(100vh - 80px))", maxHeight:"calc(100vh - 80px)",
       background:"#1a1710", border:"1px solid rgba(212,175,80,0.25)",
       borderRadius:6, display:"flex", flexDirection:"column", zIndex:1000,
       fontFamily:"'IBM Plex Mono', monospace",
@@ -58,9 +59,15 @@ export default function AgentChat() {
         <span style={{ fontSize:11, color:"#d4af50", letterSpacing:".14em", textTransform:"uppercase" }}>
           Gravitas AI
         </span>
-        <button onClick={() => setOpen(false)} style={{
-          background:"none", border:"none", color:"rgba(232,224,204,0.3)", cursor:"pointer", fontSize:16,
-        }}>✕</button>
+        <button
+          onClick={() => setOpen(false)}
+          onMouseEnter={e => { e.currentTarget.style.color="#d4af50"; e.currentTarget.style.background="rgba(212,175,80,0.1)"; }}
+          onMouseLeave={e => { e.currentTarget.style.color="rgba(232,224,204,0.45)"; e.currentTarget.style.background="none"; }}
+          style={{
+            background:"none", border:"none", color:"rgba(232,224,204,0.45)", cursor:"pointer",
+            fontSize:16, lineHeight:1, padding:"2px 6px", borderRadius:3, transition:"color .15s",
+          }}
+        >✕</button>
       </div>
 
       {/* Messages */}
