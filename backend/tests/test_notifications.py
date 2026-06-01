@@ -1,5 +1,3 @@
-# backend/tests/test_notifications.py
-
 from tests.conftest import TestingSessionLocal
 from models import IntegrationItem, IntegrationConnection
 from datetime import datetime, timezone
