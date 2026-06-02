@@ -434,19 +434,4 @@ Everything else (OAuth callback, status check, disconnect, notifications page) w
 
 ---
 
-## CI/CD
 
-GitHub Actions runs on every push to `main`:
-
-1. Lints Python with flake8
-2. Starts Redis service container
-3. Runs full pytest suite
-4. Builds Docker image
-
-Red commit = broken tests = no deploy.
-
----
-
-## License
-
-MIT
